@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	broker = "localhost"
-	port = 1883
+	broker                                = "localhost"
+	port                                  = 10004
 	messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 		fmt.Printf("Message \"%s\" received on topic  \"%s\"\n", msg.Payload(), msg.Topic())
 	}
@@ -27,22 +27,22 @@ var (
 )
 
 type Agent struct {
-	ID 				string
-	clientOpt 		*mqtt.ClientOptions
-	Notifier 		chan []byte
-	newClient 		chan chan []byte
-	closingClient 	chan chan[]byte
-	clients			map[chan []byte] bool
+	ID            string
+	clientOpt     *mqtt.ClientOptions
+	Notifier      chan []byte
+	newClient     chan chan []byte
+	closingClient chan chan []byte
+	clients       map[chan []byte]bool
 }
 
 func newAgent() (agent *Agent) {
 	agent = &Agent{
-		ID:				uuid.NewString(),
-		Notifier: 		make(chan []byte, 1),
-		newClient:     	make(chan chan []byte),
-		closingClient:  make(chan chan []byte),
-		clients: 		make(map[chan []byte]bool),
-		clientOpt: 		mqtt.NewClientOptions(),
+		ID:            uuid.NewString(),
+		Notifier:      make(chan []byte, 1),
+		newClient:     make(chan chan []byte),
+		closingClient: make(chan chan []byte),
+		clients:       make(map[chan []byte]bool),
+		clientOpt:     mqtt.NewClientOptions(),
 	}
 
 	go agent.listen()
@@ -70,36 +70,22 @@ func (agent *Agent) listen() {
 
 	for {
 		select {
-		case s := <- agent.newClient:
+		case s := <-agent.newClient:
 			//New client connect
 			agent.clients[s] = true
 			event := fmt.Sprintf("Client added to %s. Clients connected: %d", agent.ID, len(agent.clients))
 			log.Println(event)
 			mqtt_cfg.Publish(client, event)
 
-		case s := <- agent.closingClient:
+		case s := <-agent.closingClient:
 			//Client disconnect
 			delete(agent.clients, s)
 			event := fmt.Sprintf("Removed client from %s. Client connected: %d", agent.ID, len(agent.clients))
 			log.Println(event)
 			mqtt_cfg.Publish(client, event)
 
-		case event := <- agent.Notifier:
+		case event := <-agent.Notifier:
 			log.Printf(string(event))
-			//options := mqtt.NewClientOptions()
-			//options.AddBroker(fmt.Sprintf("tcp://%s:%d", broker, port))
-			//options.SetClientID("agent")
-			//options.SetKeepAlive(60 * time.Second)
-			//options.SetPingTimeout(1 * time.Second)
-			//options.SetDefaultPublishHandler(messagePubHandler)
-			//options.OnConnect = connectHandler
-			//options.OnConnectionLost = connectionLostHandler
-
-			//client := mqtt.NewClient(options)
-			//token := client.Connect()
-			//if token.Wait() && token.Error() != nil {
-			//	panic(token.Error())
-			//}
 
 			mqtt_cfg.Publish(client, string(event))
 
@@ -139,12 +125,11 @@ func (agent *Agent) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	for {
 		_, _ = fmt.Fprintf(rw, "data: %s\n\n", <-messageChan)
-
 		flusher.Flush()
 	}
 }
 
-func main()  {
+func main() {
 	agent := newAgent()
 
 	go func() {
